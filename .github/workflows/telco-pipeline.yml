@@ -21,8 +21,9 @@ jobs:
 
     # 3. Log in to your Red Hat Sandbox
     - name: Log in to OpenShift
-      run: oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify
-
+            run: |
+        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify
+        oc project samitpandey3110-dev
     # 4. Trigger the Build (CI)
     - name: Trigger Build
       run: |
