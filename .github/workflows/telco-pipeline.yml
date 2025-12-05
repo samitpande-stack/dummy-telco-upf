@@ -1,0 +1,68 @@
+name: Telco CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Download the code from GitHub
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    # 2. Install the OpenShift CLI (oc) tool on the runner
+    - name: Install oc tool
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        oc: "4"
+
+    # 3. Log in to your Red Hat Sandbox
+    - name: Log in to OpenShift
+      run: oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify
+
+    # 4. Trigger the Build (CI)
+    - name: Trigger Build
+      run: |
+        echo "Starting Build..."
+        oc start-build dummy-telco-upf --follow
+
+    # 5. Wait for Deployment (CD)
+    - name: Verify Deployment
+      run: |
+        oc rollout status deployment/dummy-telco-upf
+        echo "Deployment Complete."
+
+    # 6. LCM: GitOps Scaling
+    # This reads a file named 'replicas.txt' (we will make this soon)
+    # and scales the cloud automatically.
+    - name: LCM - Auto Scaling
+      run: |
+        if [ -f replicas.txt ]; then
+          COUNT=$(cat replicas.txt)
+          echo "Scaling network to $COUNT nodes..."
+          oc scale deployment/dummy-upf --replicas=$COUNT
+        else
+          echo "No replica config found, skipping scaling."
+        fi
+
+    # 7. Automated Testing (Validation)
+    - name: Run Synthetic Tests
+      run: |
+        # Get the URL dynamically
+        URL=$(oc get route dummy-telco-upf -o jsonpath='{.spec.host}')
+        FULL_URL="https://$URL"
+        
+        echo "Testing Endpoint: $FULL_URL"
+        
+        # Check if the site is up (Expect HTTP 200)
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" -k $FULL_URL)
+        
+        if [ "$STATUS" == "200" ]; then
+          echo "PASS: Network Function is Live (HTTP 200)"
+        else
+          echo "FAIL: Network Function returned $STATUS"
+          exit 1
+        fi
